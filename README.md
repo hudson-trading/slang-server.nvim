@@ -8,6 +8,8 @@ Note that it is not necessary to install this plugin in order to use Slang Serve
 
 | Feature | Description |
 |---------|-------------|
+| setTopLevel | Marks a file as containing the top-level module and compiles the design |
+| setBuildFile | Given an arguments file (see `slang -f`) compile the design |
 | hierarchy | Opens a hierarchy navigator |
 | openWaveform | Opens a waveform file (e.g. VCD, FST) with a [WCP](https://gitlab.com/waveform-control-protocol/wcp) capable waveform viewer |
 | addToWaves | Adds the variable or scope currently under cursor to the waveform viewer |
@@ -25,5 +27,6 @@ return {
   },
 }
 ```
+
 
 
