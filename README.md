@@ -14,7 +14,7 @@ Note that it is not necessary to install this plugin in order to use Slang Serve
 
 ## Installation
 Use your favorite Neovim plugin manager to download and install the plugin.  If you happen to use LazyVim you can [install the plugin](https://www.lazyvim.org/configuration/plugins) by adding `~/.config/nvim/lua/plugins/slang-server.lua`:
-```
+```lua
 return {
   {
     "hudson-trading/slang-server.nvim",
@@ -25,4 +25,5 @@ return {
   },
 }
 ```
+
 
