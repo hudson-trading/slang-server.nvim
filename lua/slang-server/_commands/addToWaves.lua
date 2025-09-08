@@ -1,4 +1,4 @@
--- Parser for :SlangServer openWaveform
+-- Parser for :SlangServer addToWaves
 
 local M = {}
 
