@@ -148,6 +148,7 @@ local function on_close()
    if not M.state.open then
       return
    end
+   vim.api.nvim_buf_delete(M.state.split.bufnr, { force = true })
    M.state.tree = nil
    M.state.split = nil
    M.state.open = false
@@ -397,6 +398,7 @@ function M.show(top)
 
    local event = require("nui.utils.autocmd").event
    split:on(event.BufUnload, on_close, { once = true })
+   split:on(event.WinClosed, on_close, { once = true })
    split:on(event.CursorMoved, on_hover)
 
    split:mount()
