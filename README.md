@@ -21,8 +21,8 @@ return {
     dependencies = {
       "MunifTanjim/nui.nvim",
     },
-    name = "slang-server.nvim",
     opts = {},
   },
 }
 ```
+
