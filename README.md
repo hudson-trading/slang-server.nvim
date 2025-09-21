@@ -14,6 +14,11 @@ Note that it is not necessary to install this plugin in order to use Slang Serve
 | openWaveform | Opens a waveform file (e.g. VCD, FST) with a [WCP](https://gitlab.com/waveform-control-protocol/wcp) capable waveform viewer |
 | addToWaves | Adds the variable or scope currently under cursor to the waveform viewer |
 
+## Requirements
+
+* `slang-server` configured as a Neovim language server
+* [Nerd Font](https://www.nerdfonts.com/) is recommended
+
 ## Installation
 Use your favorite Neovim plugin manager to download and install the plugin.  If you happen to use lazy.nvim you can [install the plugin](https://www.lazyvim.org/configuration/plugins) by adding `~/.config/nvim/lua/plugins/slang-server.lua`:
 ```lua
@@ -27,7 +32,3 @@ return {
   },
 }
 ```
-
-
-
-
