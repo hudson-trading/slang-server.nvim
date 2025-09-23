@@ -32,5 +32,3 @@ return {
   },
 }
 ```
-
-BLARGH
