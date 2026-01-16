@@ -38,14 +38,13 @@
 ---@field split NuiSplit?
 ---@field tree NuiTree?
 ---@field hover NuiPopup?
----@field cellTree NuiTree?
----@field cellSplit NuiSplit?
 ---@field sv_buf vim.fn.getbufinfo.ret.item?
 ---@field sv_win vim.fn.getwininfo.ret.item?
 
 ---@class slang-server.hierarchy.TreeNode: NuiTree.Node
 ---@field path string
 ---@field _uid string
+---@field _offset integer
 ---@field _populated boolean
 ---@field kind slang-server.SlangKind
 ---@field instName string
@@ -60,22 +59,7 @@
 ---@field text string
 ---@field _uid string
 
----@alias slang-server.hierarchy.HierNode slang-server.hierarchy.TreeNode | slang-server.hierarchy.MessageNode
-
----@class slang-server.hierarchy.InstNode: NuiTree.Node
----@field instPath string
----@field instLoc slang-server.SourceLoc
----@field last boolean
----@field _uid string
-
----@class slang-server.hierarchy.CellNode: NuiTree.Node
----@field declName string
----@field declLoc slang-server.SourceLoc
----@field instCount integer
----@field _uid string
-
----@alias slang-server.hierarchy.ScopeNode slang-server.hierarchy.InstNode | slang-server.hierarchy.CellNode | slang-server.hierarchy.MessageNode
----@alias slang-server.hierarchy.Node slang-server.hierarchy.HierNode | slang-server.hierarchy.ScopeNode
+---@alias slang-server.hierarchy.Node slang-server.hierarchy.TreeNode | slang-server.hierarchy.MessageNode
 
 --- UI types
 
@@ -84,6 +68,7 @@
 ---@field complete? string | fun(subcmd_arg_lead: string): string[]
 
 ---@class slang-server.ui.Mapping
----@field impl fun(node:slang-server.hierarchy.Node?)
+---@field map string
+---@field impl fun(node:slang-server.hierarchy.TreeNode?)
 ---@field opts table
 ---@field desc string
