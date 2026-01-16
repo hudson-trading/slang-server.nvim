@@ -39,7 +39,6 @@ describe("SlangServer", function()
    -- start slang-server
    local client = vim.lsp.start({
       name = "slang-server",
-      -- NOCOMMIT -- pick this up from slang-server release
       cmd = {
          "slang-server",
       },
