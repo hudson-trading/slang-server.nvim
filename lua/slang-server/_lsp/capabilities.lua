@@ -1,38 +1,15 @@
 local M = {}
 
-M.MIN_SERVER_VERSION = "0.2.2"
-
 local UPGRADE_HINT = "Please upgrade slang-server and possibly also this plugin."
 local SOURCE_FILETYPES = { "verilog", "systemverilog" }
-
----@param v string
----@return integer, integer, integer
-local function parse_version(v)
-   v = vim.trim(v):match("^[^+]+") or v
-   local major, minor, patch = v:match("^(%d+)%.(%d+)%.(%d+)")
-   return tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0
-end
-
----@param have string
----@param want string
----@return boolean
-local function version_at_least(have, want)
-   local hM, hm, hp = parse_version(have)
-   local wM, wm, wp = parse_version(want)
-   if hM ~= wM then
-      return hM > wM
-   end
-   if hm ~= wm then
-      return hm > wm
-   end
-   return hp >= wp
-end
+local version_info = require("slang-server.version")
 
 ---@param bufnr integer
 ---@return vim.lsp.Client?
 function M.get_client(bufnr)
    for _, client in pairs(vim.lsp.get_clients({ bufnr = bufnr })) do
-      if client.server_info and client.server_info.name == "slang-server" then
+      local server_name = client.server_info and client.server_info.name
+      if server_name == "slang-server" or client.name == "slang-server" or client.name == "slang_server" then
          return client
       end
    end
@@ -60,19 +37,56 @@ function M.get_source_context()
    return bufnr
 end
 
--- Per-client cached commands set. Keyed by client.id; populated lazily on the
--- first successful static-check pass for that client and held for the client's
--- lifetime (server_info and server_capabilities don't change after the LSP
--- initialize handshake). Evicted by the LspDetach autocmd registered below.
+-- Client IDs are unique for the Neovim session, so these caches can outlive
+-- individual buffer attachments without being confused with a later client.
 ---@type table<integer, table<string, true>>
 local client_cache = {}
 
-vim.api.nvim_create_autocmd("LspDetach", {
-   group = vim.api.nvim_create_augroup("slang-server.capabilities", { clear = true }),
-   callback = function(args)
-      client_cache[args.data.client_id] = nil
-   end,
-})
+---@type table<integer, true>
+local warned_clients = {}
+
+---@param client vim.lsp.Client
+---@return boolean ok, string? err_msg
+function M.version_compatible(client)
+   local server_version = client.server_info and client.server_info.version
+   if not server_version then
+      return false, "slang-server: server does not report its version. " .. UPGRADE_HINT
+   end
+
+   local compatible = version_info.major_minor_at_least(server_version, version_info.VERSION)
+   if compatible == nil then
+      return false,
+         string.format(
+            "slang-server: could not parse server version '%s'. %s",
+            vim.trim(server_version),
+            UPGRADE_HINT
+         )
+   elseif not compatible then
+      local major, minor = version_info.parse(version_info.VERSION)
+      return false,
+         string.format(
+            "slang-server: server version %s is older than the client requirement %d.%d.x. "
+               .. "Please upgrade slang-server.",
+            vim.trim(server_version),
+            major,
+            minor
+         )
+   end
+   return true, nil
+end
+
+---@param client vim.lsp.Client
+function M.notify_version(client)
+   if warned_clients[client.id] then
+      return
+   end
+   warned_clients[client.id] = true
+
+   local ok, err = M.version_compatible(client)
+   if not ok then
+      vim.notify(err, vim.log.levels.WARN)
+   end
+end
 
 ---Validate a client's static info and return its supported-command set.
 ---@param client vim.lsp.Client
@@ -83,14 +97,9 @@ local function get_info(client)
       return cmds, nil
    end
 
-   local version = client.server_info and client.server_info.version
-   if version and not version_at_least(version, M.MIN_SERVER_VERSION) then
-      return nil,
-         string.format(
-            "slang-server: server version %s is too old (need >= %s). Please upgrade slang-server.",
-            vim.trim(version),
-            M.MIN_SERVER_VERSION
-         )
+   local compatible, version_err = M.version_compatible(client)
+   if not compatible then
+      return nil, version_err
    end
 
    local ecp = client.server_capabilities and client.server_capabilities.executeCommandProvider

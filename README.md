@@ -1,6 +1,6 @@
 # slang-server.nvim
 
-A Neovim plugin to support non-LSP features of [Slang Server](https://github.com/hudson-trading/slang-server).
+A Neovim client for managed installation and HDL-specific features of [Slang Server](https://github.com/hudson-trading/slang-server).
 
 ## Features
 
@@ -11,7 +11,7 @@ More information on plugin features can be [found here](https://hudson-trading.g
 
 ## Requirements
 
-* `slang-server` configured as a Neovim language server
+* Neovim 0.10 or newer
 * [Nerd Font](https://www.nerdfonts.com/) is recommended
 
 ### Plugin dependencies
@@ -19,6 +19,7 @@ More information on plugin features can be [found here](https://hudson-trading.g
 If installing with lazy.nvim, plugin dependencies are resolved automatically.
 
 * [nui.nvim](https://github.com/MunifTanjim/nui.nvim)
+* [mason.nvim](https://github.com/mason-org/mason.nvim) for managed server installation and updates
 
 ## Installation
 
@@ -32,11 +33,34 @@ return {
 }
 ```
 
-The plugin is lazily loaded by default on the first invocation of a `:SlangServer` command, so there's no need to rely on a plugin manager for lazy loading. To install without a plugin manager, simply clone and place the plugin directory in your Neovim runtimepath.
+The plugin initializes from its filetype plugin when a Verilog or SystemVerilog buffer is opened. To install without a plugin manager, simply clone and place the plugin directory in your Neovim runtimepath.
+
+When the first Verilog or SystemVerilog buffer is opened, the plugin uses an already attached `slang-server`, a configured path, `SLANG_SERVER_PATH`, a Mason installation, or a binary on `PATH`, in that order. If none is available, it offers to install the server with Mason. When a server managed by the plugin is from an incompatible major or minor version, it offers to update it with Mason. Explicitly configured and externally managed servers must be updated through their existing installation method.
+
+Use `:SlangServer install` to install the server with Mason, `:SlangServer update` to force a Mason update, and `:SlangServer version` to show the client and server versions.
 
 ## Configuration
 
 The default configuration can be found in [config.lua](./lua/slang-server/_core/config.lua). Override options can be defined in the global `vim.g.slang_server_config`, or passed to `opts = {...}` in the lazy.nvim plugin spec.
+
+```lua
+require("slang-server").setup({
+  server = {
+    auto_start = true,
+    path = nil,
+    args = {},
+  },
+  mason = {
+    install_if_missing = true,
+    update_on_mismatch = true,
+  },
+})
+```
+
+Set `server.auto_start = false` to keep startup entirely in another LSP configuration. To let the server identify the plugin version in that case, use `before_init = require("slang-server").before_init` in the external configuration.
+
+The client and server compare major and minor versions during LSP initialization. Patch releases remain compatible; an older major or minor version produces an update warning.
+Pre-versioned plugin releases are recognized during LSP initialization and receive an update warning then.
 
 ## GitHub Repos
 
