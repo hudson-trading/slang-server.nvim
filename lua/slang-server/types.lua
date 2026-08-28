@@ -3,21 +3,9 @@
 
 ---@class (exact) slang-server.config.Configuration
 ---    The user's slang-server configuration
----@field server slang-server.config.Server?
----@field mason slang-server.config.Mason?
 ---@field kinds slang-server.config.Kinds?
 ---@field highlights slang-server.config.Highlights?
 ---@field hierarchy slang-server.config.Hierarchy?
-
----@class (exact) slang-server.config.Server
----@field auto_start boolean?
----@field path string?
----@field args string[]?
----@field root_markers string[]?
-
----@class (exact) slang-server.config.Mason
----@field install_if_missing boolean?
----@field update_on_mismatch boolean?
 
 ---@class (exact) slang-server.config.Hierarchy
 ---@field position string?

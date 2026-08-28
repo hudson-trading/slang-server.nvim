@@ -5,16 +5,6 @@ M.CONFIG = {}
 
 ---@type slang-server.config.Configuration
 local default_config = {
-   server = {
-      auto_start = true,
-      path = nil,
-      args = {},
-      root_markers = { ".slang", ".git" },
-   },
-   mason = {
-      install_if_missing = true,
-      update_on_mismatch = true,
-   },
    -- Hierarchy split window layout
    hierarchy = {
       position = "left",

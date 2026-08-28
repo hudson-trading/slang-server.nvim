@@ -58,7 +58,7 @@ describe("SlangServer", function()
       cmd = { server_bin },
       filetypes = { "systemverilog" },
       root_dir = vim.uv.cwd(),
-      before_init = require("slang-server._core.manager").before_init,
+      capabilities = require("slang-server").add_client_capabilities(),
    })
    assert(client)
    -- wait for client to attach to this buffer
