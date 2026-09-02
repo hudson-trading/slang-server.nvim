@@ -145,7 +145,22 @@ describe("SlangServer", function()
    end)
 
    it("Hierarchy renders interface ports and tolerates missing decorations", function()
-      vim.cmd("SlangServer setTopLevel tests/interface_ports.sv")
+      local request_buf = vim.api.nvim_get_current_buf()
+      local function set_top_level(path)
+         local response, request_error = vim.lsp.get_client_by_id(client):request_sync(
+            "workspace/executeCommand",
+            {
+               command = "slang.setTopLevel",
+               arguments = { vim.fn.fnamemodify(path, ":p") },
+            },
+            5000,
+            request_buf
+         )
+         assert(response, request_error)
+         assert.is_nil(response.err)
+      end
+
+      set_top_level("tests/interface_ports.sv")
       vim.cmd("SlangServer hierarchy interface_top.u")
       local lines = wait_on("Slang-server: Hierarchy")
       local rendered = table.concat(lines, "\n")
@@ -163,7 +178,7 @@ describe("SlangServer", function()
          vim.api.nvim_buf_delete(0, { force = true })
       end)
       config.kinds.interfaceport = interfaceport
-      vim.cmd("SlangServer setTopLevel tests/foo.sv")
+      set_top_level("tests/foo.sv")
       assert(ok, err)
    end)
 end)
