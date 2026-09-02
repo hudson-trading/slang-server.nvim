@@ -129,7 +129,7 @@ local function prepare_node(node, parent_node)
    if node.text then
       navigation.make_comment_line(node, line)
    else
-      local decoration = config.kinds[string.lower(node.kind)]
+      local decoration = config.kinds[string.lower(node.kind)] or { icon = "?", hl = hl.HIER_NORMAL }
       local expander = " "
 
       if
@@ -137,6 +137,8 @@ local function prepare_node(node, parent_node)
          or node.kind == "Scope"
          or node.kind == "InstanceArray"
          or node.kind == "ScopeArray"
+         or node.kind == "InterfacePort"
+         or node.kind == "InterfacePortArray"
          or node.kind == "Package"
       then
          if node.children and not node:is_expanded() then

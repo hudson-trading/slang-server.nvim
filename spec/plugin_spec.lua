@@ -282,6 +282,28 @@ describe("SlangServer", function()
       vim.api.nvim_buf_delete(0, { force = true })
    end)
 
+   it("Hierarchy renders interface ports and tolerates missing decorations", function()
+      vim.cmd("SlangServer setTopLevel tests/interface_ports.sv")
+      vim.cmd("SlangServer hierarchy interface_top.u")
+      local lines = wait_on("Slang-server: Hierarchy")
+      find_line(lines, "single_bus")
+      find_line(lines, "bus_array")
+      vim.api.nvim_buf_delete(0, { force = true })
+
+      local config = require("slang-server._core.config").CONFIG
+      local interfaceport = config.kinds.interfaceport
+      config.kinds.interfaceport = nil
+      local ok, err = pcall(function()
+         vim.cmd("SlangServer hierarchy interface_top.u")
+         lines = wait_on("Slang-server: Hierarchy")
+         find_line(lines, "? single_bus")
+         vim.api.nvim_buf_delete(0, { force = true })
+      end)
+      config.kinds.interfaceport = interfaceport
+      vim.cmd("SlangServer setTopLevel tests/foo.sv")
+      assert(ok, err)
+   end)
+
    it("Cell selections activate instances", function()
       execute_server_command("slang.setTopLevel", { vim.api.nvim_buf_get_name(source_buf) })
       vim.cmd("SlangServer hierarchy")
