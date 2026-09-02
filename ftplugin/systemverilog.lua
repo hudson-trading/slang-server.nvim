@@ -1,6 +1,6 @@
-require("slang-server").setup()
-
 local _CMD = "SlangServer"
+
+require("slang-server._lsp.clientCommands").register()
 
 local subcommands = {}
 subcommands = vim.tbl_deep_extend("error", subcommands, require("slang-server._commands.setTopLevel"))

@@ -1,19 +1,27 @@
 -- Main module file
 
 local config = require("slang-server._core.config")
-local version_info = require("slang-server.version")
 
 ---@class SlangModule
----@field version string
----@field add_client_capabilities fun(client_capabilities: table?): table
 local M = {}
-M.version = version_info.VERSION
-M.add_client_capabilities = version_info.add_client_capabilities
 
 ---@param opts slang-server.config.Configuration?
 M.setup = function(opts)
    config.update(opts)
-   version_info.setup()
+end
+
+---@param query string
+---@param callback fun(result: slang-server.lsp.HierarchySearchResult)
+---@param opts slang-server.SearchHierarchyOptions?
+M.search_hierarchy = function(query, callback, opts)
+   opts = opts or {}
+   local capabilities = require("slang-server._lsp.capabilities")
+   local client = require("slang-server._lsp.client")
+   local handlers = require("slang-server.handlers")
+   client.searchHierarchy(opts.bufnr or capabilities.get_source_context(), {
+      on_success = callback,
+      on_failure = opts.on_error or handlers.defaultOnFailure,
+   }, { query = query })
 end
 
 return M

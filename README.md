@@ -9,9 +9,18 @@ Neovim supports all standard [LSP](https://microsoft.github.io/language-server-p
 This plugin is for the following features which extend the standard LSP interface.
 More information on plugin features can be [found here](https://hudson-trading.github.io/slang-server/hdl/neovim/).
 
+Hierarchy search is also available to Neovim integrations without transferring the full design:
+
+```lua
+require("slang-server").search_hierarchy("fifo.data", function(result)
+  vim.print(result.totalResults, result.matches)
+end)
+```
+
+The server performs the fuzzy match and returns at most 100 entries per query.
+
 ## Requirements
 
-* Neovim 0.10 or newer
 * `slang-server` configured as a Neovim language server
 * [Nerd Font](https://www.nerdfonts.com/) is recommended
 
@@ -33,24 +42,11 @@ return {
 }
 ```
 
-The plugin initializes from its filetype plugin when a Verilog or SystemVerilog buffer is opened. To install without a plugin manager, simply clone and place the plugin directory in your Neovim runtimepath.
-
-Configure and install the language server with the Neovim tooling of your choice. For example, `slang-server` is available from [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) as `slang_server` and from [mason.nvim](https://github.com/mason-org/mason.nvim) as `slang-server`. This plugin does not install, configure, or start the language server.
-
-The plugin compares its version with an attached server and warns when the server is too old. The warning suggests updating with your existing package manager and includes `:MasonInstall slang-server` for Mason users.
+The plugin is lazily loaded by default on the first invocation of a `:SlangServer` command, so there's no need to rely on a plugin manager for lazy loading. To install without a plugin manager, simply clone and place the plugin directory in your Neovim runtimepath.
 
 ## Configuration
 
 The default configuration can be found in [config.lua](./lua/slang-server/_core/config.lua). Override options can be defined in the global `vim.g.slang_server_config`, or passed to `opts = {...}` in the lazy.nvim plugin spec.
-
-The plugin checks the server after it attaches, without changing the user's LSP configuration. To additionally advertise the plugin version to the server during initialization, pass the capabilities table produced by your other plugins through `add_client_capabilities`, then use the returned table in your existing LSP configuration:
-
-```lua
-local capabilities = vim.lsp.protocol.make_client_capabilities()
-capabilities = require("slang-server").add_client_capabilities(capabilities)
-```
-
-The client and server compare major and minor versions. Patch releases remain compatible; an older major or minor version produces an update warning.
 
 ## GitHub Repos
 
