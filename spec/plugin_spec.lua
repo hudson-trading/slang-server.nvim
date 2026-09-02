@@ -98,6 +98,40 @@ describe("SlangServer", function()
       assert.is_nil(request_error)
       return response
    end
+
+   local function wait_for_active_instance(module_name, target)
+      local done = false
+      local response
+      local request_error
+      local function request_active_instance()
+         done = false
+         vim.lsp.get_client_by_id(client):request(
+            "workspace/executeCommand",
+            { command = "slang.getActiveInstance", arguments = { module_name } },
+            function(err, result)
+               request_error = err
+               response = result
+               done = true
+            end,
+            source_buf
+         )
+      end
+
+      request_active_instance()
+      local success = vim.wait(5000, function()
+         if request_error or (done and response and response.instPath == target) then
+            return true
+         end
+         if done then
+            request_active_instance()
+         end
+         return false
+      end, 10)
+      assert.is_nil(request_error)
+      assert(success, vim.inspect(response))
+      return response
+   end
+
    -- wait for client to attach to this buffer
    local success, _ = vim.wait(5000, function()
       return #vim.lsp.get_clients() > 0
@@ -107,7 +141,17 @@ describe("SlangServer", function()
    vim.cmd("luafile ftplugin/systemverilog.lua")
    vim.cmd("luafile lua/slang-server/init.lua")
    -- compile design
-   vim.cmd("SlangServer setTopLevel")
+   execute_server_command("slang.setTopLevel", { vim.api.nvim_buf_get_name(source_buf) })
+
+   after_each(function()
+      local navigation = require("slang-server.navigation")
+      if navigation.state.open then
+         navigation.on_close()
+      end
+      if vim.api.nvim_buf_is_valid(source_buf) then
+         vim.api.nvim_set_current_buf(source_buf)
+      end
+   end)
 
    it("Generic quick pick dispatches its selected value", function()
       local client_commands = require("slang-server._lsp.clientCommands")
@@ -202,7 +246,8 @@ describe("SlangServer", function()
       assert(vim.wait(5000, function()
          return result ~= nil
       end))
-      assert.are.same(4, result.totalResults)
+      -- Fuzzy path matches include the four instances and their parameter children.
+      assert.are.same(8, result.totalResults)
       assert.is_true(#result.matches <= 100)
       assert.is_true(vim.iter(result.matches):any(function(item)
          return item.path == "foo.gen_loop[2].the_sub"
@@ -329,7 +374,7 @@ describe("SlangServer", function()
       local target = "foo.gen_loop[2].the_sub"
       press_key(cells_win, find_line(lines, target), "<CR>")
 
-      local active = execute_server_command("slang.getActiveInstance", { "sub" })
+      local active = wait_for_active_instance("sub", target)
       assert.are.same(target, active.instPath)
 
       local _, hierarchy_win = wait_on("Slang-server: Hierarchy")
@@ -345,8 +390,9 @@ describe("SlangServer", function()
       local lines, hierarchy_win = wait_on("Slang-server: Hierarchy")
       press_key(hierarchy_win, find_line(lines, "the_sub sub"), "<CR>")
 
-      local active = execute_server_command("slang.getActiveInstance", { "sub" })
+      local active = wait_for_active_instance("sub", target)
       assert.are.same(target, active.instPath)
+      vim.api.nvim_set_current_win(hierarchy_win)
       vim.api.nvim_buf_delete(0, { force = true })
    end)
 end)
