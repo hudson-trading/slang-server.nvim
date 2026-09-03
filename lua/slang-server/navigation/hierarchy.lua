@@ -54,7 +54,6 @@ local function map_keys(split, tree)
          impl = function(node)
             if node and node.instLoc then
                util.jump_loc(node.instLoc, navigation.state.sv_win.winnr)
-               navigation.set_active_instance(node.path)
             end
          end,
          opts = { noremap = true },
@@ -129,7 +128,7 @@ local function prepare_node(node, parent_node)
    if node.text then
       navigation.make_comment_line(node, line)
    else
-      local decoration = config.kinds[string.lower(node.kind)] or { icon = "?", hl = hl.HIER_NORMAL }
+      local decoration = config.kinds[string.lower(node.kind)]
       local expander = " "
 
       if
@@ -137,8 +136,6 @@ local function prepare_node(node, parent_node)
          or node.kind == "Scope"
          or node.kind == "InstanceArray"
          or node.kind == "ScopeArray"
-         or node.kind == "InterfacePort"
-         or node.kind == "InterfacePortArray"
          or node.kind == "Package"
       then
          if node.children and not node:is_expanded() then
