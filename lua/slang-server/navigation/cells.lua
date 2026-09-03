@@ -66,9 +66,7 @@ local function scope_jump(node)
       return
    end
 
-   navigation.set_active_instance(instPath, function()
-      hier.open_remainder(nil, true, instPath, true)
-   end)
+   hier.open_remainder(nil, true, instPath, true)
 end
 
 ---@param insts slang-server.lsp.QualifiedInstance[]
