@@ -47,13 +47,12 @@ end
 local function scope_jump(node)
    local navigation = require("slang-server.navigation")
    local hier = require("slang-server.navigation/hierarchy")
-   local loc = nil
    local instPath = nil
    if node and node.instLoc then
-      loc = node.instLoc
+      util.jump_loc(node.instLoc, navigation.state.sv_win.winnr)
       instPath = node.instPath
    elseif node and node.declLoc then
-      loc = node.declLoc
+      util.jump_loc(node.declLoc, navigation.state.sv_win.winnr)
       local children = node:get_child_ids()
       if children then
          local child = M.state.tree:get_node(children[1])
@@ -67,10 +66,7 @@ local function scope_jump(node)
       return
    end
 
-   navigation.set_active_instance(instPath, function()
-      util.jump_loc(loc, navigation.state.sv_win.winnr)
-      hier.open_remainder(nil, true, instPath, true)
-   end)
+   hier.open_remainder(nil, true, instPath, true)
 end
 
 ---@param insts slang-server.lsp.QualifiedInstance[]
