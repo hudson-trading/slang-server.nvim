@@ -13,8 +13,6 @@ if vim.lsp.config then
    })
 end
 
-require("slang-server._lsp.clientCommands").register()
-
 local subcommands = {}
 subcommands = vim.tbl_deep_extend("error", subcommands, require("slang-server._commands.setTopLevel"))
 subcommands = vim.tbl_deep_extend("error", subcommands, require("slang-server._commands.setBuildFile"))

@@ -31,6 +31,7 @@
 ---@field value string
 
 ---@class slang-server.lsp.Scope : slang-server.lsp.Item
+---@field type string?
 ---@field children slang-server.lsp.Item[]
 
 ---@class slang-server.lsp.Instance : slang-server.lsp.Item
@@ -43,13 +44,17 @@
 
 ---@class slang-server.lsp.QualifiedInstance
 ---@field instPath string
----@field instLoc string
+---@field instLoc slang-server.ScopedRange
 
 ---@class slang-server.lsp.InstanceSet
 ---@field declName string
----@field declLoc slang-server.SourceLoc
+---@field declLoc slang-server.ScopedRange
 ---@field instCount integer
 ---@field inst slang-server.lsp.QualifiedInstance?
+
+---@class slang-server.lsp.ScopeStep
+---@field path string
+---@field children slang-server.lsp.Node[]
 
 ---@class slang-server.lsp.HierarchySearchItem
 ---@field name string

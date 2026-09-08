@@ -148,30 +148,6 @@ describe("SlangServer", function()
       return response
    end
 
-   local function press_key_and_wait_for_activation(win, line)
-      local navigation = require("slang-server.navigation")
-      local original_set_active_instance = navigation.set_active_instance
-      local activated_path
-      navigation.set_active_instance = function(hier_path, on_success)
-         original_set_active_instance(hier_path, function()
-            activated_path = hier_path
-            if on_success then
-               on_success()
-            end
-         end)
-      end
-
-      local ok, err = pcall(function()
-         press_key(win, line, "<CR>")
-         assert(vim.wait(5000, function()
-            return activated_path ~= nil
-         end))
-      end)
-      navigation.set_active_instance = original_set_active_instance
-      assert(ok, err)
-      return activated_path
-   end
-
    local function focus_source()
       if vim.api.nvim_win_is_valid(source_win) then
          vim.api.nvim_set_current_win(source_win)
@@ -205,88 +181,299 @@ describe("SlangServer", function()
       assert(ok, err)
    end)
 
-   it("Generic quick pick dispatches its selected value", function()
-      local client_commands = require("slang-server._lsp.clientCommands")
-      local original_select = vim.ui.select
-      local original_execute = client_commands.executeServerCommand
-      local command
-      local selected
+   it("Merges partial navigation keymap configuration", function()
+      local config = require("slang-server._core.config")
+      local original = config.CONFIG
 
-      local ok, err = pcall(function()
-         client_commands.executeServerCommand = function(selected_command, value)
-            command = selected_command
-            selected = value
-         end
-         vim.ui.select = function(items, options, on_choice)
-            assert.are.same("Pick one", options.prompt)
-            assert.are.same("second (current)", options.format_item(items[2]))
-            on_choice(items[2])
-         end
-         vim.lsp.commands["slang.quickPick"]({
-            arguments = {
-               {
-                  placeholder = "Pick one",
-                  items = {
-                     { label = "first", value = 1 },
-                     { label = "second", description = "(current)", value = 2 },
-                  },
-                  onSelectCommand = "test.callback",
+      config.update({
+         navigation = {
+            hierarchy = {
+               keymaps = {
+                  jump = "g<cr>",
+                  toggle = false,
                },
             },
-         }, { bufnr = 0 })
-      end)
-      vim.ui.select = original_select
-      client_commands.executeServerCommand = original_execute
+         },
+      })
 
-      assert(ok, err)
-      assert.are.same("test.callback", command)
-      assert.are.same(2, selected)
+      assert.are.same("g<cr>", config.CONFIG.navigation.hierarchy.keymaps.jump)
+      assert.is_false(config.CONFIG.navigation.hierarchy.keymaps.toggle)
+      assert.are.same("q", config.CONFIG.navigation.hierarchy.keymaps.close)
+      assert.are.same("<cr>", config.CONFIG.navigation.cells.keymaps.jump)
+      assert.are.same("left", config.CONFIG.navigation.position)
+      assert.are.same(50, config.CONFIG.navigation.width)
+      assert.is_false(config.CONFIG.navigation.wrap)
+      assert.is_true(config.CONFIG.navigation.cells.show)
+      assert.are.same(25, config.CONFIG.navigation.cells.height)
+
+      config.CONFIG = original
    end)
 
-   it("Active instance notifications reveal an open hierarchy", function()
-      local client_commands = require("slang-server._lsp.clientCommands")
+   it("Adds configured mappings and skips disabled mappings", function()
       local navigation = require("slang-server.navigation")
-      local hierarchy = require("slang-server.navigation/hierarchy")
-      local original_open = hierarchy.open_remainder
-      local original_state = navigation.state.open
-      local revealed
+      local mappings = {}
+      local spec = {
+         impl = function() end,
+         desc = "Test mapping",
+      }
+
+      navigation.add_mapping(mappings, "g<cr>", spec)
+      navigation.add_mapping(mappings, false, spec)
+
+      assert.are.same({ ["g<cr>"] = spec }, mappings)
+   end)
+
+   it("Routes hierarchy navigation through server commands", function()
+      local lsp = require("slang-server._lsp.client")
+      local capabilities = require("slang-server._lsp.capabilities")
+      local original_supported = capabilities.command_supported
+      local original_get_client = capabilities.get_client
+      local requests = {}
 
       local ok, err = pcall(function()
-         hierarchy.open_remainder = function(parent, root, path, from_cell)
-            revealed = { parent, root, path, from_cell }
+         capabilities.command_supported = function()
+            return true
+         end
+         capabilities.get_client = function()
+            return {
+               request = function(_, method, params, callback, bufnr)
+                  requests[#requests + 1] = { bufnr = bufnr, method = method, params = params }
+                  callback(nil, nil)
+                  return true
+               end,
+            }
          end
 
-         navigation.state.open = false
-         client_commands.activeInstanceChanged(nil, { hierPath = "top.hidden" })
-         assert.is_nil(revealed)
-
-         navigation.state.open = true
-         client_commands.activeInstanceChanged(nil, { hierPath = "top.visible" })
-         assert.are.same({ nil, true, "top.visible", false }, revealed)
+         local handlers = { on_success = function() end }
+         lsp.showHierLocation(7, handlers, { hierPath = "top.child", takeFocus = true })
       end)
-      hierarchy.open_remainder = original_open
+
+      capabilities.command_supported = original_supported
+      capabilities.get_client = original_get_client
+      assert(ok, err)
+
+      assert.are.same({
+         bufnr = 7,
+         method = "workspace/executeCommand",
+         params = {
+            command = "slang.showHierLocation",
+            arguments = { { hierPath = "top.child", takeFocus = true } },
+         },
+      }, requests[1])
+   end)
+
+   it("Targets the same source window and buffer for hierarchy navigation", function()
+      local navigation = require("slang-server.navigation")
+      local lsp = require("slang-server._lsp.client")
+      local capabilities = require("slang-server._lsp.capabilities")
+      local original_source_win = rawget(navigation.state, "sv_win")
+      local original_get_client = capabilities.get_client
+      local source_win = {
+         bufnr = vim.api.nvim_get_current_buf(),
+         winid = vim.api.nvim_get_current_win(),
+         winnr = vim.api.nvim_get_current_win(),
+      }
+      navigation.state.sv_win = source_win
+
+      local original_show = lsp.showHierLocation
+      local request
+      local ok, err = pcall(function()
+         capabilities.get_client = function(bufnr)
+            if bufnr == source_win.bufnr then
+               return {}
+            end
+         end
+         lsp.showHierLocation = function(bufnr, _, params)
+            request = {
+               bufnr = bufnr,
+               current_win = vim.api.nvim_get_current_win(),
+               params = params,
+            }
+         end
+
+         navigation.show_hier_location("top.child")
+      end)
+      lsp.showHierLocation = original_show
+      capabilities.get_client = original_get_client
+      navigation.state.sv_win = original_source_win
+
+      assert(ok, err)
+      assert.are.same(source_win.bufnr, request.bufnr)
+      assert.are.same(source_win.winid, request.current_win)
+      assert.are.same({ hierPath = "top.child", takeFocus = true }, request.params)
+   end)
+
+   it("Does not request hierarchy navigation without a valid source window", function()
+      local navigation = require("slang-server.navigation")
+      local lsp = require("slang-server._lsp.client")
+      local original_source_win = rawget(navigation.state, "sv_win")
+      local original_show = lsp.showHierLocation
+      local requested = false
+
+      navigation.state.sv_win = false
+      lsp.showHierLocation = function()
+         requested = true
+      end
+      local messages = capture_notifications(function()
+         navigation.show_hier_location("top.child")
+      end)
+      lsp.showHierLocation = original_show
+      navigation.state.sv_win = original_source_win
+
+      assert.is_false(requested)
+      assert.are.same({ "Cannot jump to location: invalid target window" }, messages)
+   end)
+
+   it("Discards hierarchy reveal results from an older session", function()
+      local hierarchy = require("slang-server.navigation.hierarchy")
+      local navigation = require("slang-server.navigation")
+      local lsp = require("slang-server._lsp.client")
+      local original_tree = hierarchy.state.tree
+      local original_split = hierarchy.state.split
+      local original_generation = hierarchy.state.generation
+      local original_open_state = navigation.state.open
+      local original_source_buf = rawget(navigation.state, "sv_buf")
+      local original_get_scopes = lsp.getScopes
+      local deferred
+      local old_tree = {
+         get_nodes = function()
+            return { {} }
+         end,
+         render = function() end,
+      }
+
+      local ok, err = pcall(function()
+         hierarchy.state.tree = old_tree
+         hierarchy.state.split = { winid = vim.api.nvim_get_current_win() }
+         hierarchy.state.generation = 20
+         navigation.state.open = true
+         navigation.state.sv_buf = { bufnr = 7 }
+         lsp.getScopes = function(_, handlers)
+            deferred = handlers.on_success
+         end
+
+         hierarchy.reveal("top", { focus = true })
+         hierarchy.state.generation = 21
+         deferred({ { path = "", children = {} } })
+      end)
+
+      hierarchy.state.tree = original_tree
+      hierarchy.state.split = original_split
+      hierarchy.state.generation = original_generation
+      navigation.state.open = original_open_state
+      navigation.state.sv_buf = original_source_buf
+      lsp.getScopes = original_get_scopes
+
+      assert(ok, err)
+   end)
+
+   it("Discards older reveal results in the same hierarchy session", function()
+      local hierarchy = require("slang-server.navigation.hierarchy")
+      local navigation = require("slang-server.navigation")
+      local lsp = require("slang-server._lsp.client")
+      local original_tree = hierarchy.state.tree
+      local original_split = hierarchy.state.split
+      local original_generation = hierarchy.state.generation
+      local original_open_state = navigation.state.open
+      local original_source_buf = rawget(navigation.state, "sv_buf")
+      local original_get_scopes = lsp.getScopes
+      local responses = {}
+      local nodes = { {} }
+      local mutations = 0
+      local tree = {
+         get_nodes = function()
+            return nodes
+         end,
+         set_nodes = function(_, refreshed)
+            nodes = refreshed
+            mutations = mutations + 1
+         end,
+         render = function() end,
+      }
+
+      local ok, err = pcall(function()
+         hierarchy.state.tree = tree
+         hierarchy.state.split = { winid = vim.api.nvim_get_current_win() }
+         hierarchy.state.generation = 20
+         navigation.state.open = true
+         navigation.state.sv_buf = { bufnr = 7 }
+         lsp.getScopes = function(_, handlers)
+            responses[#responses + 1] = handlers
+         end
+
+         hierarchy.reveal("old")
+         hierarchy.reveal("new")
+         responses[2].on_success({
+            { path = "", children = { { instName = "new", kind = "Instance", children = {} } } },
+         })
+         responses[1].on_success({
+            { path = "", children = { { instName = "old", kind = "Instance", children = {} } } },
+         })
+
+         assert.are.same(1, mutations)
+         assert.are.same("new", nodes[1].instName)
+      end)
+
+      hierarchy.state.tree = original_tree
+      hierarchy.state.split = original_split
+      hierarchy.state.generation = original_generation
+      navigation.state.open = original_open_state
+      navigation.state.sv_buf = original_source_buf
+      lsp.getScopes = original_get_scopes
+
+      assert(ok, err)
+   end)
+
+   it("Reveals paths without reopening an active hierarchy", function()
+      local hierarchy = require("slang-server.navigation.hierarchy")
+      local navigation = require("slang-server.navigation")
+      local original_reveal = hierarchy.reveal
+      local original_show = hierarchy.show
+      local original_state = navigation.state.open
+      local revealed
+      local reopened = false
+
+      local ok, err = pcall(function()
+         hierarchy.reveal = function(path, opts)
+            revealed = { path, opts }
+         end
+         hierarchy.show = function()
+            reopened = true
+         end
+         navigation.state.open = true
+
+         navigation.show("top.child", true)
+
+         assert.are.same({ "top.child", { focus = true } }, revealed)
+         assert.is_false(reopened)
+      end)
+
+      hierarchy.reveal = original_reveal
+      hierarchy.show = original_show
       navigation.state.open = original_state
 
       assert(ok, err)
    end)
 
-   it("Single-instance code lenses reveal an open hierarchy", function()
-      local client_commands = require("slang-server._lsp.clientCommands")
-      local original_reveal = client_commands.revealInHierarchy
-      local shown
+   it("Parses and resolves hierarchy path segments", function()
+      local path = require("slang-server.navigation.path")
+      assert.are.same(
+         { "pkg", "top", "gen", "[2]", "child" },
+         path.split("pkg::top.gen[2].child")
+      )
+      assert.are.same("pkg::member", path.join("pkg", "member", "Package"))
+      assert.are.same("top.array[2]", path.join("top.array", "[2]", "InstanceArray"))
+      assert.are.same("top.child", path.join("top", "child", "Instance"))
 
-      local ok, err = pcall(function()
-         client_commands.revealInHierarchy = function(params)
-            shown = params
-         end
-         vim.lsp.commands["slang.showInHierarchy"]({
-            arguments = { { hierPath = "top.only" } },
-         })
-      end)
-      client_commands.revealInHierarchy = original_reveal
+      local combined = { { instName = "gen[2]", path = "top.gen[2]" } }
+      local child, index = path.resolve_child(combined, { "gen", "[2]" }, 1)
+      assert.are.same(combined[1], child)
+      assert.are.same(2, index)
 
-      assert(ok, err)
-      assert.are.same({ hierPath = "top.only" }, shown)
+      local separate = { { instName = "[2]", path = "top.gen[2]" } }
+      child, index = path.resolve_child(separate, { "[2]" }, 1, "top.gen")
+      assert.are.same(separate[1], child)
+      assert.are.same(1, index)
    end)
 
    it("Searches hierarchy members through the server API", function()
@@ -313,6 +500,10 @@ describe("SlangServer", function()
    it("Hierarchy no args", function()
       vim.cmd("SlangServer hierarchy")
       local lines = wait_on("Slang-server: Hierarchy")
+      local hierarchy = require("slang-server.navigation.hierarchy")
+      local cells = require("slang-server.navigation.cells")
+      assert.is_false(vim.api.nvim_get_option_value("wrap", { win = hierarchy.state.split.winid }))
+      assert.is_false(vim.api.nvim_get_option_value("wrap", { win = cells.state.split.winid }))
       local expected = [=[
    foo foo]=]
       assert.are.same(expected, table.concat(lines, "\n"))
@@ -322,7 +513,55 @@ describe("SlangServer", function()
    └╴foo
   sub (4)]=]
       assert.are.same(expected, table.concat(lines, "\n"))
+
+      local source_winid = require("slang-server.navigation").state.source_winid
+      local source_bufnr = vim.api.nvim_win_get_buf(source_winid)
+      for _, state in ipairs({ hierarchy.state, cells.state }) do
+         local target_bufnr = vim.api.nvim_create_buf(true, false)
+         vim.api.nvim_set_current_win(state.split.winid)
+         vim.api.nvim_win_set_buf(state.split.winid, target_bufnr)
+
+         assert.are.same(state.split.bufnr, vim.api.nvim_win_get_buf(state.split.winid))
+         assert.are.same(target_bufnr, vim.api.nvim_win_get_buf(source_winid))
+
+         vim.api.nvim_win_set_buf(source_winid, source_bufnr)
+         vim.api.nvim_buf_delete(target_bufnr, { force = true })
+      end
       vim.api.nvim_buf_delete(0, { force = true })
+   end)
+
+   it("Focuses an existing hierarchy window", function()
+      local navigation = require("slang-server.navigation")
+      local hierarchy = package.loaded["slang-server.navigation/hierarchy"]
+         or package.loaded["slang-server.navigation.hierarchy"]
+         or require("slang-server.navigation.hierarchy")
+      local original_open = navigation.state.open
+      local original_split = hierarchy.state.split
+      local original_reveal = hierarchy.reveal
+      local original_is_valid = vim.api.nvim_win_is_valid
+      local original_set_current = vim.api.nvim_set_current_win
+      local focused
+
+      local ok, err = pcall(function()
+         navigation.state.open = true
+         hierarchy.state.split = { winid = 42 }
+         hierarchy.reveal = function() end
+         vim.api.nvim_win_is_valid = function(winid)
+            return winid == 42
+         end
+         vim.api.nvim_set_current_win = function(winid)
+            focused = winid
+         end
+
+         navigation.show("")
+         assert.are.same(42, focused)
+      end)
+      navigation.state.open = original_open
+      hierarchy.state.split = original_split
+      hierarchy.reveal = original_reveal
+      vim.api.nvim_win_is_valid = original_is_valid
+      vim.api.nvim_set_current_win = original_set_current
+      assert(ok, err)
    end)
 
    it("Explicit commands use the source buffer when focus is in the hierarchy panel", function()
@@ -420,41 +659,33 @@ describe("SlangServer", function()
       assert(ok, err)
    end)
 
-   it("Cell selections activate instances", function()
-      execute_server_command("slang.setTopLevel", { vim.api.nvim_buf_get_name(source_buf) })
-      vim.cmd("SlangServer hierarchy")
+   it("Renders and expands interface ports", function()
+      local ok, err = pcall(function()
+         local interface_file = vim.fn.fnamemodify("tests/interface_port_arrays.sv", ":p")
+         vim.cmd("SlangServer setTopLevel " .. vim.fn.fnameescape(interface_file))
+         vim.cmd("SlangServer hierarchy interface_port_top.dut.bus.valid")
 
-      local lines, cells_win = wait_on("Slang-server: Cells")
-      press_key(cells_win, find_line(lines, "sub (4)"), "<Space>")
-      lines, cells_win = wait_on("Slang-server: Cells")
-      local target = "foo.gen_loop[2].the_sub"
-      local activated = press_key_and_wait_for_activation(cells_win, find_line(lines, target))
-      assert.are.same(target, activated)
+         local lines = wait_on("Slang-server: Hierarchy")
+         local rendered = table.concat(lines, "\n")
+         assert.is_not_nil(string.find(rendered, "󰈀 bus test_bus", 1, true))
+         assert.is_not_nil(string.find(rendered, "valid logic", 1, true))
 
-      local active = execute_server_command("slang.getActiveInstance", { "sub" })
-      assert.are.same(target, active.instPath)
+         require("slang-server.navigation").on_close()
+         vim.cmd("SlangServer hierarchy interface_port_top.dut.buses[-1].valid")
+         lines = wait_on("Slang-server: Hierarchy")
+         rendered = table.concat(lines, "\n")
+         assert.is_not_nil(string.find(rendered, "󰈀 buses test_bus", 1, true))
+         assert.is_not_nil(string.find(rendered, "󰈀 [-1] test_bus", 1, true))
+         assert.is_not_nil(string.find(rendered, "valid logic", 1, true))
+      end)
 
-      local _, hierarchy_win = wait_on("Slang-server: Hierarchy")
-      vim.api.nvim_set_current_win(hierarchy_win)
-      vim.api.nvim_buf_delete(0, { force = true })
-   end)
-
-   it("Hierarchy selections activate instances", function()
-      execute_server_command("slang.setTopLevel", { vim.api.nvim_buf_get_name(source_buf) })
-      local target = "foo.gen_loop[3].the_sub"
-      vim.cmd("SlangServer hierarchy " .. target)
-
-      local lines, hierarchy_win = wait_on("Slang-server: Hierarchy")
-      local activated = press_key_and_wait_for_activation(
-         hierarchy_win,
-         find_line(lines, "the_sub sub")
-      )
-      assert.are.same(target, activated)
-
-      local active = execute_server_command("slang.getActiveInstance", { "sub" })
-      assert.are.same(target, active.instPath)
-      vim.api.nvim_set_current_win(hierarchy_win)
-      vim.api.nvim_buf_delete(0, { force = true })
+      local navigation = require("slang-server.navigation")
+      if navigation.state.open then
+         navigation.on_close()
+      end
+      local foo_file = vim.fn.fnamemodify("tests/foo.sv", ":p")
+      vim.cmd("SlangServer setTopLevel " .. vim.fn.fnameescape(foo_file))
+      assert(ok, err)
    end)
 end)
 

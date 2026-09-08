@@ -9,8 +9,6 @@ Neovim supports all standard [LSP](https://microsoft.github.io/language-server-p
 This plugin is for the following features which extend the standard LSP interface.
 More information on plugin features can be [found here](https://hudson-trading.github.io/slang-server/features/hdl/neovim/).
 
-The hierarchy and Cells views can select an active elaborated instance for each module or interface. That selection drives instance-specific hovers and inlay hints, and stays synchronized with CodeLens and Go to Definition navigation.
-
 Hierarchy search is also available to Neovim integrations without transferring the full design:
 
 ```lua
@@ -49,6 +47,28 @@ The plugin is lazily loaded by default on the first invocation of a `:SlangServe
 ## Configuration
 
 The default configuration can be found in [config.lua](./lua/slang-server/_core/config.lua). Override options can be defined in the global `vim.g.slang_server_config`, or passed to `opts = {...}` in the lazy.nvim plugin spec.
+
+```lua
+require("slang-server").setup({
+  navigation = {
+    position = "left",
+    width = 50,
+    wrap = false,
+    hierarchy = {
+      keymaps = {
+        jump = "<cr>",
+      },
+    },
+    cells = {
+      show = true,
+      height = 25, -- rows
+      keymaps = {
+        jump = "<cr>",
+      },
+    },
+  },
+})
+```
 
 ## GitHub Repos
 
