@@ -9,7 +9,6 @@ M.hierarchy = {
       local bufnr = capabilities.get_source_context()
       local required = {
          "slang.getScope",
-         "slang.getScopes",
          "slang.getScopesByModule",
          "slang.getInstancesOfModule",
          "slang.showHierLocation",
@@ -19,12 +18,7 @@ M.hierarchy = {
       end
 
       local top = args[1]
-      if not top then
-         local client = capabilities.get_client(bufnr)
-         assert(client)
-         top = require("slang-server._lsp.state").get_active_path(client.id)
-      end
-      require("slang-server.navigation").show(top or "", top ~= nil)
+      require("slang-server.navigation").show(top or "")
    end,
 }
 

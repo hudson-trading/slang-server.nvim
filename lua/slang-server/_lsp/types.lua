@@ -44,34 +44,12 @@
 
 ---@class slang-server.lsp.QualifiedInstance
 ---@field instPath string
----@field instLoc slang-server.ScopedRange
+---@field instLoc string
 
 ---@class slang-server.lsp.InstanceSet
 ---@field declName string
----@field declLoc slang-server.ScopedRange
+---@field declLoc slang-server.SourceLoc
 ---@field instCount integer
 ---@field inst slang-server.lsp.QualifiedInstance?
-
----@class slang-server.lsp.ScopeStep
----@field path string
----@field children slang-server.lsp.Node[]
-
----@class slang-server.lsp.ActivateInstanceParams
----@field hierPath string
----@field interactionSource string
-
----@class slang-server.lsp.ClientState
----@field active_path string?
-
----@class slang-server.lsp.HierarchySearchItem
----@field name string
----@field path string
----@field kind slang-server.SlangKind
----@field description string?
----@field containerName string?
-
----@class slang-server.lsp.HierarchySearchResult
----@field totalResults integer
----@field matches slang-server.lsp.HierarchySearchItem[]
 
 ---@alias RespHandlers {on_success: fun(resp: any), on_failure?: fun(message: string)}

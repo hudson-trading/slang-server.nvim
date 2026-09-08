@@ -3,26 +3,21 @@ local hl = require("slang-server._core.highlights")
 local client = require("slang-server._lsp.client")
 local handlers = require("slang-server.handlers")
 local util = require("slang-server.util")
-local config = require("slang-server._core.config").CONFIG
 
 local M = {}
 
 ---@type slang-server.navigation.cells.State
-M.state = { generation = 0 }
+M.state = {}
 
 function M.on_close()
-   require("slang-server.navigation").unprotect_window(M.state)
-   M.state.generation = M.state.generation + 1
-   local split = M.state.split
+   vim.api.nvim_buf_delete(M.state.split.bufnr, { force = true })
    M.state.tree = nil
    M.state.split = nil
-   if split and vim.api.nvim_buf_is_valid(split.bufnr) then
-      vim.api.nvim_buf_delete(split.bufnr, { force = true })
-   end
 end
 
 ---@param node slang-server.navigation.ScopeNode
-local function prepare_node(node)
+---@param parent_node slang-server.navigation.CellNode?
+local function prepare_node(node, parent_node)
    local navigation = require("slang-server.navigation")
    local line = ui.NuiLine()
 
@@ -50,11 +45,16 @@ end
 
 ---@param node slang-server.navigation.ScopeNode
 local function scope_jump(node)
-   local hier = require("slang-server.navigation.hierarchy")
+   local navigation = require("slang-server.navigation")
+   local hier = require("slang-server.navigation/hierarchy")
    local instPath = nil
    if node and node.instPath then
       instPath = node.instPath
+      navigation.show_hier_location(node.instPath)
    elseif node and node.declName then
+      if node.declLoc then
+         util.jump_loc(node.declLoc, navigation.state.sv_win.winnr)
+      end
       local children = node:get_child_ids()
       if children then
          local child = M.state.tree:get_node(children[1])
@@ -68,9 +68,7 @@ local function scope_jump(node)
       return
    end
 
-   require("slang-server.navigation").set_active_instance(instPath, function()
-      hier.reveal(instPath, { focus = true })
-   end)
+   hier.open_remainder(nil, true, instPath, true)
 end
 
 ---@param insts slang-server.lsp.QualifiedInstance[]
@@ -107,15 +105,15 @@ end
 ---@param tree NuiTree
 local function map_keys(split, tree)
    local navigation = require("slang-server.navigation")
-   ---@type table<string, slang-server.ui.Mapping>
-   local mappings = {}
-   local keys = assert(config.navigation and config.navigation.cells.keymaps)
-   navigation.add_mapping(mappings, keys.jump, {
+   ---@type table<string, slang-server.ui.Mapping[]>
+   local mappings
+   mappings = {
+      ["<cr>"] = {
          impl = scope_jump,
          opts = { noremap = true },
-         desc = "Reveal node in hierarchy",
-      })
-   navigation.add_mapping(mappings, keys.toggle, {
+         desc = "Jump to node in source",
+      },
+      ["<space>"] = {
          impl = function(node)
             if not node or not node.declName then
                return
@@ -127,29 +125,15 @@ local function map_keys(split, tree)
                node:expand()
                tree:render()
             else
-               local source = navigation.state.sv_buf
-               if not source then
+               if not navigation.state.sv_buf then
                   vim.notify("No SV buffer", vim.log.levels.ERROR)
-                  return
                end
 
-               local generation = M.state.generation
-               local node_id = node:get_id()
-               client.getInstancesOfModule(source.bufnr, {
+               client.getInstancesOfModule(navigation.state.sv_buf.bufnr, {
                   on_success = function(resp)
-                     if not navigation.session_active(M.state, generation) then
-                        return
-                     end
-                     local current_node = M.state.tree:get_node(node_id)
-                     if current_node then
-                        show_insts(resp, current_node, true)
-                     end
+                     show_insts(resp, node, true)
                   end,
-                  on_failure = function(message)
-                     if navigation.session_active(M.state, generation) then
-                        handlers.defaultOnFailure(message)
-                     end
-                  end,
+                  on_failure = handlers.defaultOnFailure,
                }, { moduleName = node.declName })
 
                navigation.message(M.state.tree, "Loading instances...", { parent = node, hl = hl.HIER_SUBTLE })
@@ -157,30 +141,30 @@ local function map_keys(split, tree)
          end,
          opts = { noremap = true },
          desc = "Expand / collapse node",
-      })
-   navigation.add_mapping(mappings, keys.close, {
+      },
+      ["q"] = {
          impl = function()
             split:unmount()
          end,
          opts = { noremap = true },
          desc = "Close",
-      })
-   navigation.add_mapping(mappings, keys.help, {
+      },
+      ["?"] = {
          impl = function()
             util.show_help(mappings, "Cell view")
          end,
          opts = { noremap = true },
          desc = "Show help",
-      })
+      },
+   }
 
    navigation.map_keys(split, tree, mappings)
 end
 
 ---@param insts slang-server.lsp.InstanceSet[]
----@param generation integer
-local function show_nodes(insts, generation)
+local function show_nodes(insts)
    local navigation = require("slang-server.navigation")
-   if not navigation.session_active(M.state, generation) then
+   if not navigation.state.open then
       return
    end
 
@@ -199,7 +183,7 @@ local function show_nodes(insts, generation)
       local cell_nui_node = ui.NuiTree.Node(cell_node)
       M.state.tree:add_node(cell_nui_node)
       if cell.inst then
-         show_insts({ cell.inst }, cell_nui_node, false)
+         show_insts({ cell.inst }, cell_nui_node)
       end
    end
 
@@ -208,14 +192,7 @@ end
 
 function M.show()
    local navigation = require("slang-server.navigation")
-   local hier = require("slang-server.navigation.hierarchy")
-   local navigation_config = config.navigation
-   local cells_config = navigation_config.cells
-
-   if not cells_config.show then
-      M.on_close()
-      return
-   end
+   local hier = require("slang-server.navigation/hierarchy")
 
    if not hier.state.split then
       return
@@ -227,15 +204,11 @@ function M.show()
          winid = hier.state.split.winid,
       },
       position = "bottom",
-      size = cells_config.height,
-      buf_options = {
-         bufhidden = "hide",
-      },
+      size = "40%",
       win_options = {
          signcolumn = "no",
          number = false,
          relativenumber = false,
-         wrap = navigation_config.wrap,
       },
    })
 
@@ -254,29 +227,19 @@ function M.show()
    map_keys(split, tree)
 
    M.state.split = split
-   navigation.protect_window(M.state)
    M.state.tree = tree
-   M.state.generation = M.state.generation + 1
-   local generation = M.state.generation
 
-   local source = navigation.state.sv_buf
-   if not source then
+   if not navigation.state.sv_buf then
       vim.notify("No SV buffer", vim.log.levels.ERROR)
-      return
    end
 
    navigation.message(tree, "Loading cells...", { hl = hl.HIER_SUBTLE })
 
-   client.getScopesByModule(source.bufnr, {
+   client.getScopesByModule(navigation.state.sv_buf.bufnr, {
       on_success = function(resp)
-         show_nodes(resp, generation)
+         show_nodes(resp)
       end,
-      on_failure = function(message)
-         if not navigation.session_active(M.state, generation) then
-            return
-         end
-         handlers.defaultOnFailure(message)
-      end,
+      on_failure = handlers.defaultOnFailure,
    })
 
    vim.api.nvim_buf_set_name(split.bufnr, "Slang-server: Cells")
