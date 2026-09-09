@@ -6,6 +6,14 @@
 ---@field kinds slang-server.config.Kinds?
 ---@field highlights slang-server.config.Highlights?
 ---@field navigation slang-server.config.Navigation?
+---@field keymaps slang-server.config.Keymaps?
+---@field search slang-server.config.Search?
+
+---@alias slang-server.config.SearchPicker "auto"|"fzf-lua"|"telescope"|"snacks"|"vim.ui"|slang-server.navigation.SearchPicker
+
+---@class (exact) slang-server.config.Search
+---@field picker slang-server.config.SearchPicker?
+---@field query_delay integer? debounce in milliseconds, in addition to any picker delay
 
 ---@class (exact) slang-server.config.Navigation
 ---@field position string?
@@ -24,6 +32,16 @@
 
 ---@alias slang-server.config.Key string|false
 
+---@class (exact) slang-server.config.Keymap
+---@field key string?
+---@field enabled boolean?
+
+---@class (exact) slang-server.config.Keymaps
+---@field enable_defaults boolean?
+---@field hierarchy slang-server.config.Keymap?
+---@field searchHierarchy slang-server.config.Keymap?
+---@field selectActive slang-server.config.Keymap?
+
 ---@class (exact) slang-server.config.HierarchyKeymaps
 ---@field yank_path slang-server.config.Key?
 ---@field yank_value slang-server.config.Key?
@@ -31,12 +49,20 @@
 ---@field jump slang-server.config.Key?
 ---@field jump_to_declaration slang-server.config.Key?
 ---@field toggle slang-server.config.Key?
+---@field search_hierarchy slang-server.config.Key?
 ---@field close slang-server.config.Key?
 ---@field help slang-server.config.Key?
+
+---@class slang-server.navigation.SearchPickerOptions
+---@field search fun(query:string, callback:fun(result:slang-server.lsp.HierarchySearchResult))
+---@field select fun(item:slang-server.lsp.HierarchySearchItem)
+
+---@alias slang-server.navigation.SearchPicker fun(opts:slang-server.navigation.SearchPickerOptions)
 
 ---@class (exact) slang-server.config.CellsKeymaps
 ---@field jump slang-server.config.Key?
 ---@field toggle slang-server.config.Key?
+---@field search_hierarchy slang-server.config.Key?
 ---@field close slang-server.config.Key?
 ---@field help slang-server.config.Key?
 
@@ -126,8 +152,11 @@
 --- UI types
 
 ---@class slang-server.ui.Subcommand
----@field impl fun(args: string[], opts: table)
+---@field impl fun(args: string[], opts: table, bufnr: integer)
 ---@field complete? string | fun(subcmd_arg_lead: string): string[]
+---@field desc string
+---@field required_commands string[]
+---@field context fun(args: string[]): integer
 
 ---@class slang-server.ui.Mapping
 ---@field impl fun(node:slang-server.navigation.Node?)

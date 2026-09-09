@@ -206,7 +206,9 @@ local function map_keys(split, tree)
    navigation.add_mapping(mappings, keys.jump, {
          impl = function(node)
             if node and node.path then
-               navigation.show_hier_location(node.path)
+               navigation.set_active_instance(node.path, function()
+                  navigation.show_hier_location(node.path)
+               end)
             end
          end,
          opts = { noremap = true },
@@ -236,6 +238,13 @@ local function map_keys(split, tree)
          end,
          opts = { noremap = true },
          desc = "Expand / collapse node",
+      })
+   navigation.add_mapping(mappings, keys.search_hierarchy, {
+         impl = function()
+            vim.cmd("SlangServer searchHierarchy")
+         end,
+         opts = { noremap = true },
+         desc = "Search hierarchy",
       })
    navigation.add_mapping(mappings, keys.close, {
          impl = function()

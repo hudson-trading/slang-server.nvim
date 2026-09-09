@@ -68,7 +68,9 @@ local function scope_jump(node)
       return
    end
 
-   hier.reveal(instPath, { focus = true })
+   require("slang-server.navigation").set_active_instance(instPath, function()
+      hier.reveal(instPath, { focus = true })
+   end)
 end
 
 ---@param insts slang-server.lsp.QualifiedInstance[]
@@ -155,6 +157,13 @@ local function map_keys(split, tree)
          end,
          opts = { noremap = true },
          desc = "Expand / collapse node",
+      })
+   navigation.add_mapping(mappings, keys.search_hierarchy, {
+         impl = function()
+            vim.cmd("SlangServer searchHierarchy")
+         end,
+         opts = { noremap = true },
+         desc = "Search hierarchy",
       })
    navigation.add_mapping(mappings, keys.close, {
          impl = function()
